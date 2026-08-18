@@ -4,8 +4,11 @@ import com.jperez.lgsstorecrm.customer.dto.CreateCustomerRequest;
 import com.jperez.lgsstorecrm.customer.dto.CustomerResponse;
 import com.jperez.lgsstorecrm.customer.dto.UpdateCustomerRequest;
 import jakarta.validation.Valid;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -40,7 +43,10 @@ public class CustomerController {
     }
 
     @GetMapping
-    public ResponseEntity<Page<CustomerResponse>> listCustomers(Pageable pageable) {
+    public ResponseEntity<Page<CustomerResponse>> listCustomers(
+            @ParameterObject
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
+            Pageable pageable) {
         Page<CustomerResponse> customers = customerService.listCustomers(pageable)
                 .map(CustomerResponse::new);
         return ResponseEntity.ok(customers);

@@ -1,11 +1,14 @@
 package com.jperez.lgsstorecrm.transaction;
 
+import com.jperez.lgsstorecrm.customer.dto.CustomerResponse;
 import com.jperez.lgsstorecrm.transaction.dto.CreateTransactionRequest;
 import com.jperez.lgsstorecrm.transaction.dto.TransactionResponse;
-import com.jperez.lgsstorecrm.customer.dto.CustomerResponse;
 import jakarta.validation.Valid;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -36,8 +39,11 @@ public class CreditTransactionController {
     }
 
     @GetMapping
-    public ResponseEntity<Page<TransactionResponse>> getTransactionHistory(@PathVariable UUID customerId,
-                                                                           Pageable pageable) {
+    public ResponseEntity<Page<TransactionResponse>> getTransactionHistory(
+            @PathVariable UUID customerId,
+            @ParameterObject
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
+            Pageable pageable) {
         Page<TransactionResponse> history = customerCreditService.getTransactionHistory(customerId, pageable)
                 .map(TransactionResponse::new);
         return ResponseEntity.ok(history);
