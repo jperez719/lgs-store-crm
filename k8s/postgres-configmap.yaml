@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  namespace: store-crm
+data:
+  POSTGRES_DB: store_crm_db
