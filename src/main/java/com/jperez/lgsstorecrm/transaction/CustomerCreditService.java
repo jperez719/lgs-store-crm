@@ -53,7 +53,7 @@ public class CustomerCreditService {
         customerRepository.save(customer);
 
         CreditTransaction transaction = new CreditTransaction(
-                customer, employee, type, amount, reason, newBalance
+                customer.getTenant(), customer, employee, type, amount, reason, newBalance
         );
         creditTransactionRepository.save(transaction);
 

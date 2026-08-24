@@ -49,8 +49,9 @@ public class CreditTransaction {
         // required by JPA
     }
 
-    public CreditTransaction(Customer customer, Employee employee, TransactionType type,
+    public CreditTransaction(Tenant tenant, Customer customer, Employee employee, TransactionType type,
                              BigDecimal amount, String reason, BigDecimal resultingBalance) {
+        this.tenant = tenant;
         this.customer = customer;
         this.employee = employee;
         this.type = type;

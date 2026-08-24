@@ -18,8 +18,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import java.math.BigDecimal;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -77,6 +76,8 @@ class CustomerCreditServiceConcurrencyTest {
         CountDownLatch startLatch = new CountDownLatch(1);
         CountDownLatch doneLatch = new CountDownLatch(threadCount);
 
+        List<Throwable> failures = Collections.synchronizedList(new ArrayList<>());
+
         Runnable creditTask = () -> {
             try {
                 readyLatch.countDown();
@@ -85,8 +86,8 @@ class CustomerCreditServiceConcurrencyTest {
                         tenantId, customerId, employeeId, TransactionType.CREDIT,
                         new BigDecimal("50.00"), "Concurrent credit"
                 );
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+            } catch (Throwable t) {
+                failures.add(t);
             } finally {
                 doneLatch.countDown();
             }
@@ -101,6 +102,7 @@ class CustomerCreditServiceConcurrencyTest {
         executor.shutdown();
 
         assertThat(finished).isTrue();
+        assertThat(failures).isEmpty(); // <-- this will now surface the real exception if one occurred
 
         Customer updated = customerRepository.findByIdAndTenantId(customerId, tenantId).orElseThrow();
         assertThat(updated.getStoreCredit()).isEqualByComparingTo("100.00");
