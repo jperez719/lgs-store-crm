@@ -8,9 +8,6 @@ import java.util.UUID;
 
 public interface CreditTransactionRepository extends JpaRepository<CreditTransaction, UUID> {
 
-    @Deprecated
-    Page<CreditTransaction> findByCustomerIdOrderByCreatedAtDesc(UUID customerId, Pageable pageable);
-
     Page<CreditTransaction> findByCustomerIdAndTenantIdOrderByCreatedAtDesc(
             UUID customerId, UUID tenantId, Pageable pageable);
 }

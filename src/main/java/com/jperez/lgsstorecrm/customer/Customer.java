@@ -43,7 +43,7 @@ public class Customer {
     private List<CreditTransaction> transactions = new ArrayList<>();
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "tenant_id")
+    @JoinColumn(name = "tenant_id", nullable = false)
     private Tenant tenant;
 
     protected Customer() {

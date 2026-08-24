@@ -17,7 +17,7 @@ services:
       retries: 5
 
   app:
-    build: .
+    image: lgs-store-crm:v2-multitenancy
     container_name: store-crm-app
     environment:
       SPRING_PROFILES_ACTIVE: docker

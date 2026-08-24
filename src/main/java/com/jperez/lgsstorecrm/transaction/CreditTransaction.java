@@ -42,7 +42,7 @@ public class CreditTransaction {
     private LocalDateTime createdAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "tenant_id")
+    @JoinColumn(name = "tenant_id", nullable = false)
     private Tenant tenant;
 
     protected CreditTransaction() {

@@ -31,7 +31,7 @@ public class Employee {
     private LocalDateTime updatedAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "tenant_id")
+    @JoinColumn(name = "tenant_id", nullable = false)
     private Tenant tenant;
 
     protected Employee() {
