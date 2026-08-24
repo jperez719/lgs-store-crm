@@ -38,6 +38,7 @@ class CustomerCreditServiceTest {
 
     private CustomerCreditService customerCreditService;
 
+    private UUID tenantId;
     private UUID customerId;
     private UUID employeeId;
     private Customer customer;
@@ -49,6 +50,7 @@ class CustomerCreditServiceTest {
                 customerRepository, creditTransactionRepository, employeeRepository
         );
 
+        tenantId = UUID.randomUUID();
         customerId = UUID.randomUUID();
         employeeId = UUID.randomUUID();
 
@@ -60,11 +62,11 @@ class CustomerCreditServiceTest {
 
     @Test
     void creditTransaction_increasesBalance() {
-        when(customerRepository.findByIdForUpdate(customerId)).thenReturn(Optional.of(customer));
-        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        when(customerRepository.findByIdAndTenantIdForUpdate(customerId, tenantId)).thenReturn(Optional.of(customer));
+        when(employeeRepository.findByIdAndTenantId(employeeId, tenantId)).thenReturn(Optional.of(employee));
 
         Customer result = customerCreditService.applyTransaction(
-                customerId, employeeId, TransactionType.CREDIT, new BigDecimal("25.00"), "Refund"
+                tenantId, customerId, employeeId, TransactionType.CREDIT, new BigDecimal("25.00"), "Refund"
         );
 
         assertThat(result.getStoreCredit()).isEqualByComparingTo("75.00");
@@ -73,11 +75,11 @@ class CustomerCreditServiceTest {
 
     @Test
     void debitTransaction_decreasesBalance() {
-        when(customerRepository.findByIdForUpdate(customerId)).thenReturn(Optional.of(customer));
-        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        when(customerRepository.findByIdAndTenantIdForUpdate(customerId, tenantId)).thenReturn(Optional.of(customer));
+        when(employeeRepository.findByIdAndTenantId(employeeId, tenantId)).thenReturn(Optional.of(employee));
 
         Customer result = customerCreditService.applyTransaction(
-                customerId, employeeId, TransactionType.DEBIT, new BigDecimal("20.00"), "Purchase"
+                tenantId, customerId, employeeId, TransactionType.DEBIT, new BigDecimal("20.00"), "Purchase"
         );
 
         assertThat(result.getStoreCredit()).isEqualByComparingTo("30.00");
@@ -85,25 +87,24 @@ class CustomerCreditServiceTest {
 
     @Test
     void debitTransaction_exceedingBalance_throwsInsufficientCreditException() {
-        when(customerRepository.findByIdForUpdate(customerId)).thenReturn(Optional.of(customer));
-        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        when(customerRepository.findByIdAndTenantIdForUpdate(customerId, tenantId)).thenReturn(Optional.of(customer));
+        when(employeeRepository.findByIdAndTenantId(employeeId, tenantId)).thenReturn(Optional.of(employee));
 
         assertThatThrownBy(() -> customerCreditService.applyTransaction(
-                customerId, employeeId, TransactionType.DEBIT, new BigDecimal("100.00"), "Purchase"
+                tenantId, customerId, employeeId, TransactionType.DEBIT, new BigDecimal("100.00"), "Purchase"
         )).isInstanceOf(InsufficientCreditException.class);
 
-        // Balance must remain untouched, and nothing should be persisted
         verify(customerRepository, never()).save(any());
         verify(creditTransactionRepository, never()).save(any());
     }
 
     @Test
     void debitTransaction_exactBalance_succeedsAndResultsInZero() {
-        when(customerRepository.findByIdForUpdate(customerId)).thenReturn(Optional.of(customer));
-        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        when(customerRepository.findByIdAndTenantIdForUpdate(customerId, tenantId)).thenReturn(Optional.of(customer));
+        when(employeeRepository.findByIdAndTenantId(employeeId, tenantId)).thenReturn(Optional.of(employee));
 
         Customer result = customerCreditService.applyTransaction(
-                customerId, employeeId, TransactionType.DEBIT, new BigDecimal("50.00"), "Full redemption"
+                tenantId, customerId, employeeId, TransactionType.DEBIT, new BigDecimal("50.00"), "Full redemption"
         );
 
         assertThat(result.getStoreCredit()).isEqualByComparingTo("0.00");
@@ -111,10 +112,10 @@ class CustomerCreditServiceTest {
 
     @Test
     void applyTransaction_nonexistentCustomer_throwsCustomerNotFoundException() {
-        when(customerRepository.findByIdForUpdate(customerId)).thenReturn(Optional.empty());
+        when(customerRepository.findByIdAndTenantIdForUpdate(customerId, tenantId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> customerCreditService.applyTransaction(
-                customerId, employeeId, TransactionType.CREDIT, new BigDecimal("10.00"), "Test"
+                tenantId, customerId, employeeId, TransactionType.CREDIT, new BigDecimal("10.00"), "Test"
         )).isInstanceOf(CustomerNotFoundException.class);
 
         verifyNoInteractions(employeeRepository);
@@ -123,11 +124,11 @@ class CustomerCreditServiceTest {
 
     @Test
     void applyTransaction_nonexistentEmployee_throwsEmployeeNotFoundException() {
-        when(customerRepository.findByIdForUpdate(customerId)).thenReturn(Optional.of(customer));
-        when(employeeRepository.findById(employeeId)).thenReturn(Optional.empty());
+        when(customerRepository.findByIdAndTenantIdForUpdate(customerId, tenantId)).thenReturn(Optional.of(customer));
+        when(employeeRepository.findByIdAndTenantId(employeeId, tenantId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> customerCreditService.applyTransaction(
-                customerId, employeeId, TransactionType.CREDIT, new BigDecimal("10.00"), "Test"
+                tenantId, customerId, employeeId, TransactionType.CREDIT, new BigDecimal("10.00"), "Test"
         )).isInstanceOf(EmployeeNotFoundException.class);
 
         verify(customerRepository, never()).save(any());
@@ -136,11 +137,11 @@ class CustomerCreditServiceTest {
 
     @Test
     void applyTransaction_savesTransactionWithCorrectResultingBalance() {
-        when(customerRepository.findByIdForUpdate(customerId)).thenReturn(Optional.of(customer));
-        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        when(customerRepository.findByIdAndTenantIdForUpdate(customerId, tenantId)).thenReturn(Optional.of(customer));
+        when(employeeRepository.findByIdAndTenantId(employeeId, tenantId)).thenReturn(Optional.of(employee));
 
         customerCreditService.applyTransaction(
-                customerId, employeeId, TransactionType.CREDIT, new BigDecimal("15.00"), "Store promo"
+                tenantId, customerId, employeeId, TransactionType.CREDIT, new BigDecimal("15.00"), "Store promo"
         );
 
         ArgumentCaptor<CreditTransaction> captor = ArgumentCaptor.forClass(CreditTransaction.class);
@@ -153,5 +154,19 @@ class CustomerCreditServiceTest {
         assertThat(saved.getReason()).isEqualTo("Store promo");
         assertThat(saved.getCustomer()).isEqualTo(customer);
         assertThat(saved.getEmployee()).isEqualTo(employee);
+    }
+
+    @Test
+    void applyTransaction_customerBelongsToDifferentTenant_throwsCustomerNotFoundException() {
+        // The customer exists, but NOT under this tenantId — simulating a request
+        // where someone from Tenant B tries to act on Tenant A's customer.
+        when(customerRepository.findByIdAndTenantIdForUpdate(customerId, tenantId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> customerCreditService.applyTransaction(
+                tenantId, customerId, employeeId, TransactionType.CREDIT, new BigDecimal("10.00"), "Test"
+        )).isInstanceOf(CustomerNotFoundException.class);
+
+        verifyNoInteractions(employeeRepository);
+        verify(creditTransactionRepository, never()).save(any());
     }
 }

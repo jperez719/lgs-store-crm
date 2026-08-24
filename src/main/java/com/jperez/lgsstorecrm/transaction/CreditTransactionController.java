@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/customers/{customerId}/transactions")
+@RequestMapping("/api/tenants/{tenantId}/customers/{customerId}/transactions")
 public class CreditTransactionController {
 
     private final CustomerCreditService customerCreditService;
@@ -26,9 +26,11 @@ public class CreditTransactionController {
     }
 
     @PostMapping
-    public ResponseEntity<CustomerResponse> applyTransaction(@PathVariable UUID customerId,
+    public ResponseEntity<CustomerResponse> applyTransaction(@PathVariable UUID tenantId,
+                                                             @PathVariable UUID customerId,
                                                              @Valid @RequestBody CreateTransactionRequest request) {
         var customer = customerCreditService.applyTransaction(
+                tenantId,
                 customerId,
                 request.getEmployeeId(),
                 request.getType(),
@@ -40,11 +42,12 @@ public class CreditTransactionController {
 
     @GetMapping
     public ResponseEntity<Page<TransactionResponse>> getTransactionHistory(
+            @PathVariable UUID tenantId,
             @PathVariable UUID customerId,
             @ParameterObject
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
             Pageable pageable) {
-        Page<TransactionResponse> history = customerCreditService.getTransactionHistory(customerId, pageable)
+        Page<TransactionResponse> history = customerCreditService.getTransactionHistory(tenantId, customerId, pageable)
                 .map(TransactionResponse::new);
         return ResponseEntity.ok(history);
     }

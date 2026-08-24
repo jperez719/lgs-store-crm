@@ -31,14 +31,13 @@ public class CustomerCreditService {
     }
 
     @Transactional
-    public Customer applyTransaction(UUID customerId, UUID employeeId, TransactionType type,
+    public Customer applyTransaction(UUID tenantId, UUID customerId, UUID employeeId, TransactionType type,
                                      BigDecimal amount, String reason) {
 
-        // Row-level lock: blocks any other transaction for THIS customer until this method commits.
-        Customer customer = customerRepository.findByIdForUpdate(customerId)
+        Customer customer = customerRepository.findByIdAndTenantIdForUpdate(customerId, tenantId)
                 .orElseThrow(() -> new CustomerNotFoundException(customerId));
 
-        Employee employee = employeeRepository.findById(employeeId)
+        Employee employee = employeeRepository.findByIdAndTenantId(employeeId, tenantId)
                 .orElseThrow(() -> new EmployeeNotFoundException(employeeId));
 
         BigDecimal currentBalance = customer.getStoreCredit();
@@ -62,10 +61,11 @@ public class CustomerCreditService {
     }
 
     @Transactional(readOnly = true)
-    public Page<CreditTransaction> getTransactionHistory(UUID customerId, Pageable pageable) {
-        if (!customerRepository.existsById(customerId)) {
+    public Page<CreditTransaction> getTransactionHistory(UUID tenantId, UUID customerId, Pageable pageable) {
+        if (customerRepository.findByIdAndTenantId(customerId, tenantId).isEmpty()) {
             throw new CustomerNotFoundException(customerId);
         }
-        return creditTransactionRepository.findByCustomerIdOrderByCreatedAtDesc(customerId, pageable);
+        return creditTransactionRepository.findByCustomerIdAndTenantIdOrderByCreatedAtDesc(
+                customerId, tenantId, pageable);
     }
 }

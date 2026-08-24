@@ -1,5 +1,6 @@
 package com.jperez.lgsstorecrm.employee;
 
+import com.jperez.lgsstorecrm.tenant.Tenant;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -28,6 +29,10 @@ public class Employee {
 
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "tenant_id")
+    private Tenant tenant;
 
     protected Employee() {
         // required by JPA
@@ -85,5 +90,13 @@ public class Employee {
 
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
+    }
+
+    public Tenant getTenant() {
+        return tenant;
+    }
+
+    public void setTenant(Tenant tenant) {
+        this.tenant = tenant;
     }
 }

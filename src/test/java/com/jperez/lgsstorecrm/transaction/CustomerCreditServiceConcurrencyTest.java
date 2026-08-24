@@ -5,6 +5,8 @@ import com.jperez.lgsstorecrm.customer.CustomerRepository;
 import com.jperez.lgsstorecrm.employee.Employee;
 import com.jperez.lgsstorecrm.employee.EmployeeRepository;
 import com.jperez.lgsstorecrm.employee.Role;
+import com.jperez.lgsstorecrm.tenant.Tenant;
+import com.jperez.lgsstorecrm.tenant.TenantRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -16,7 +18,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import java.math.BigDecimal;
-import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -50,16 +52,22 @@ class CustomerCreditServiceConcurrencyTest {
     @Autowired
     private EmployeeRepository employeeRepository;
 
+    @Autowired
+    private TenantRepository tenantRepository;
+
     @Test
     void concurrentCreditTransactions_onSameCustomer_bothApplyCorrectly() throws InterruptedException {
-        // Arrange: one customer, one employee, starting balance zero
-        Customer customer = customerRepository.save(
-                new Customer("Jane", "Doe", "555-1234", "123 Main St")
-        );
-        Employee employee = employeeRepository.save(
-                new Employee("John", "Smith", Role.EMPLOYEE)
-        );
+        Tenant tenant = tenantRepository.save(new Tenant("Test Store"));
 
+        Customer customer = new Customer("Jane", "Doe", "555-1234", "123 Main St");
+        customer.setTenant(tenant);
+        customer = customerRepository.save(customer);
+
+        Employee employee = new Employee("John", "Smith", Role.EMPLOYEE);
+        employee.setTenant(tenant);
+        employee = employeeRepository.save(employee);
+
+        UUID tenantId = tenant.getId();
         UUID customerId = customer.getId();
         UUID employeeId = employee.getId();
 
@@ -72,9 +80,9 @@ class CustomerCreditServiceConcurrencyTest {
         Runnable creditTask = () -> {
             try {
                 readyLatch.countDown();
-                startLatch.await(); // both threads fire as close to simultaneously as possible
+                startLatch.await();
                 customerCreditService.applyTransaction(
-                        customerId, employeeId, TransactionType.CREDIT,
+                        tenantId, customerId, employeeId, TransactionType.CREDIT,
                         new BigDecimal("50.00"), "Concurrent credit"
                 );
             } catch (InterruptedException e) {
@@ -84,23 +92,41 @@ class CustomerCreditServiceConcurrencyTest {
             }
         };
 
-        // Act: fire two threads at the same customer at (as close to) the same time
         executor.submit(creditTask);
         executor.submit(creditTask);
 
-        readyLatch.await();          // wait until both threads are ready
-        startLatch.countDown();      // release them simultaneously
+        readyLatch.await();
+        startLatch.countDown();
         boolean finished = doneLatch.await(10, TimeUnit.SECONDS);
         executor.shutdown();
 
-        // Assert
         assertThat(finished).isTrue();
 
-        Customer updated = customerRepository.findById(customerId).orElseThrow();
+        Customer updated = customerRepository.findByIdAndTenantId(customerId, tenantId).orElseThrow();
         assertThat(updated.getStoreCredit()).isEqualByComparingTo("100.00");
+    }
 
-        List<CreditTransaction> transactions =
-                customerRepository.findById(customerId).orElseThrow().getTransactions();
-        // (Note: lazy collection — see explanation below on why this line is commented out in practice)
+    @Test
+    void customerFromOneTenant_isNotAccessibleUnderAnotherTenantId() {
+        Tenant tenantA = tenantRepository.save(new Tenant("Store A"));
+        Tenant tenantB = tenantRepository.save(new Tenant("Store B"));
+
+        Customer customerInTenantA = new Customer("Alice", "Anderson", "555-1111", "1 A St");
+        customerInTenantA.setTenant(tenantA);
+        customerInTenantA = customerRepository.save(customerInTenantA);
+
+        // The critical assertion: looking up Tenant A's customer using Tenant B's id
+        // must behave exactly as if the customer does not exist.
+        Optional<Customer> result = customerRepository.findByIdAndTenantId(
+                customerInTenantA.getId(), tenantB.getId()
+        );
+
+        assertThat(result).isEmpty();
+
+        // And confirm it genuinely does exist, correctly, under its real tenant.
+        Optional<Customer> correctLookup = customerRepository.findByIdAndTenantId(
+                customerInTenantA.getId(), tenantA.getId()
+        );
+        assertThat(correctLookup).isPresent();
     }
 }

@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/customers")
+@RequestMapping("/api/tenants/{tenantId}/customers")
 public class CustomerController {
 
     private final CustomerService customerService;
@@ -26,8 +26,10 @@ public class CustomerController {
     }
 
     @PostMapping
-    public ResponseEntity<CustomerResponse> createCustomer(@Valid @RequestBody CreateCustomerRequest request) {
+    public ResponseEntity<CustomerResponse> createCustomer(@PathVariable UUID tenantId,
+                                                           @Valid @RequestBody CreateCustomerRequest request) {
         Customer customer = customerService.createCustomer(
+                tenantId,
                 request.getFirstName(),
                 request.getLastName(),
                 request.getPhoneNumber(),
@@ -37,25 +39,28 @@ public class CustomerController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<CustomerResponse> getCustomer(@PathVariable UUID id) {
-        Customer customer = customerService.getCustomer(id);
+    public ResponseEntity<CustomerResponse> getCustomer(@PathVariable UUID tenantId, @PathVariable UUID id) {
+        Customer customer = customerService.getCustomer(tenantId, id);
         return ResponseEntity.ok(new CustomerResponse(customer));
     }
 
     @GetMapping
     public ResponseEntity<Page<CustomerResponse>> listCustomers(
+            @PathVariable UUID tenantId,
             @ParameterObject
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
             Pageable pageable) {
-        Page<CustomerResponse> customers = customerService.listCustomers(pageable)
+        Page<CustomerResponse> customers = customerService.listCustomers(tenantId, pageable)
                 .map(CustomerResponse::new);
         return ResponseEntity.ok(customers);
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<CustomerResponse> updateCustomer(@PathVariable UUID id,
+    public ResponseEntity<CustomerResponse> updateCustomer(@PathVariable UUID tenantId,
+                                                           @PathVariable UUID id,
                                                            @Valid @RequestBody UpdateCustomerRequest request) {
         Customer customer = customerService.updateContactInfo(
+                tenantId,
                 id,
                 request.getFirstName(),
                 request.getLastName(),

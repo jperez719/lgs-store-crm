@@ -1,5 +1,6 @@
 package com.jperez.lgsstorecrm.customer;
 
+import com.jperez.lgsstorecrm.tenant.Tenant;
 import com.jperez.lgsstorecrm.transaction.CreditTransaction;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
@@ -40,6 +41,10 @@ public class Customer {
 
     @OneToMany(mappedBy = "customer", fetch = FetchType.LAZY)
     private List<CreditTransaction> transactions = new ArrayList<>();
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "tenant_id")
+    private Tenant tenant;
 
     protected Customer() {
         // required by JPA
@@ -119,5 +124,13 @@ public class Customer {
 
     public List<CreditTransaction> getTransactions() {
         return transactions;
+    }
+
+    public Tenant getTenant() {
+        return tenant;
+    }
+
+    public void setTenant(Tenant tenant) {
+        this.tenant = tenant;
     }
 }

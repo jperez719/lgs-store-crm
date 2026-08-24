@@ -2,6 +2,7 @@ package com.jperez.lgsstorecrm.transaction;
 
 import com.jperez.lgsstorecrm.customer.Customer;
 import com.jperez.lgsstorecrm.employee.Employee;
+import com.jperez.lgsstorecrm.tenant.Tenant;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -39,6 +40,10 @@ public class CreditTransaction {
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "tenant_id")
+    private Tenant tenant;
 
     protected CreditTransaction() {
         // required by JPA
@@ -89,5 +94,13 @@ public class CreditTransaction {
 
     public LocalDateTime getCreatedAt() {
         return createdAt;
+    }
+
+    public Tenant getTenant() {
+        return tenant;
+    }
+
+    public void setTenant(Tenant tenant) {
+        this.tenant = tenant;
     }
 }
