@@ -7,12 +7,15 @@ import com.jperez.lgsstorecrm.customer.Customer;
 import com.jperez.lgsstorecrm.customer.CustomerRepository;
 import com.jperez.lgsstorecrm.employee.Employee;
 import com.jperez.lgsstorecrm.employee.EmployeeRepository;
+import com.jperez.lgsstorecrm.transaction.event.CreditTransactionAppliedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Service
@@ -21,13 +24,16 @@ public class CustomerCreditService {
     private final CustomerRepository customerRepository;
     private final CreditTransactionRepository creditTransactionRepository;
     private final EmployeeRepository employeeRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public CustomerCreditService(CustomerRepository customerRepository,
                                  CreditTransactionRepository creditTransactionRepository,
-                                 EmployeeRepository employeeRepository) {
+                                 EmployeeRepository employeeRepository,
+                                 ApplicationEventPublisher eventPublisher) {
         this.customerRepository = customerRepository;
         this.creditTransactionRepository = creditTransactionRepository;
         this.employeeRepository = employeeRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -56,6 +62,11 @@ public class CustomerCreditService {
                 customer.getTenant(), customer, employee, type, amount, reason, newBalance
         );
         creditTransactionRepository.save(transaction);
+
+        eventPublisher.publishEvent(new CreditTransactionAppliedEvent(
+                tenantId, customerId, employeeId, transaction.getId(),
+                type, amount, newBalance, LocalDateTime.now()
+        ));
 
         return customer;
     }

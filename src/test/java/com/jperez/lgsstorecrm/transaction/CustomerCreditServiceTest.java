@@ -14,6 +14,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -36,6 +37,9 @@ class CustomerCreditServiceTest {
     @Mock
     private EmployeeRepository employeeRepository;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     private CustomerCreditService customerCreditService;
 
     private UUID tenantId;
@@ -47,7 +51,7 @@ class CustomerCreditServiceTest {
     @BeforeEach
     void setUp() {
         customerCreditService = new CustomerCreditService(
-                customerRepository, creditTransactionRepository, employeeRepository
+                customerRepository, creditTransactionRepository, employeeRepository, eventPublisher
         );
 
         tenantId = UUID.randomUUID();
