@@ -26,7 +26,7 @@ spec:
               done
       containers:
         - name: store-crm-app
-          image: lgs-store-crm:v2.1-multitenancy-fix
+          image: lgs-store-crm:v3.1-tenant-endpoints
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
