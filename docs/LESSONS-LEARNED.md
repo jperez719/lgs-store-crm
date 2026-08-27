@@ -138,3 +138,37 @@ variables/system properties by default. The practical fix was exporting
 the variables in the shell before running Maven locally (a
 `spring-dotenv` dependency was considered as a smoother alternative but
 deliberately deferred).
+
+### An aggressive liveness probe timeout can kill a healthy pod
+Both `store-crm-app` pods showed a restart count of 9, discovered while
+investigating an unrelated port conflict rather than through active
+monitoring — worth noting as its own small lesson (restart counts are
+easy to overlook if nothing is actively watching them). `kubectl describe
+pod` showed `Exit Code: 137` (SIGKILL) with `Reason: Error`, not
+`OOMKilled`, narrowing the cause to something other than memory pressure.
+
+The actual cause was in the probe configuration itself:
+`livenessProbe` had `timeoutSeconds` left at its default of 1 second,
+with `failureThreshold: 3` — meaning any 3 consecutive health checks
+slower than 1 second each (45 seconds of sustained slowness) caused
+Kubernetes to conclude the app was hung and force-kill it, even though
+the app was actually fine, just briefly slow to respond. This is
+plausible under real conditions: Actuator's `/actuator/health` touches
+the database connection pool, and the local cluster was also running
+Testcontainers-based tests concurrently, adding real resource
+contention on the same machine.
+
+The fix was setting `timeoutSeconds: 5` (and the same for the readiness
+probe) — generous enough to absorb realistic transient slowness without
+disabling the liveness check's actual purpose of catching a genuinely
+hung process.
+
+Lesson: a liveness probe's default 1-second timeout is often too
+aggressive for a real Spring Boot app whose health check has any real
+dependency behind it (a database, in this case). Worth deliberately
+choosing `timeoutSeconds` based on observed real startup/response times
+rather than leaving it at the Kubernetes default, and worth periodically
+checking `RESTARTS` counts directly (`kubectl get pods`) rather than
+only checking pod status is `Running`, since a pod can restart
+repeatedly and still show healthy at any given moment you happen to
+look.
