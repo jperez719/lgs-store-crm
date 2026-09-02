@@ -5,7 +5,7 @@ BASE_REF="${1:-main}"
 MAP_FILE="scripts/test-impact-map.yaml"
 
 if ! command -v yq &> /dev/null; then
-    echo "Error: yq is required but not installed. Install with: brew install yq" >&2
+    echo "Error: yq is required but not installed." >&2
     exit 1
 fi
 
@@ -22,9 +22,9 @@ echo "$CHANGED_FILES" | sed 's/^/  /' >&2
 echo "" >&2
 
 RUN_ALL=false
-declare -a MATCHED_TESTS=()
-declare -a MATCHED_API_TESTS=()
-declare -a UNMATCHED_FILES=()
+MATCHED_TESTS=()
+MATCHED_API_TESTS=()
+UNMATCHED_FILES=()
 
 RULE_COUNT=$(yq '.rules | length' "$MAP_FILE")
 
@@ -33,24 +33,30 @@ while IFS= read -r file; do
     FILE_MATCHED=false
 
     for ((i=0; i<RULE_COUNT; i++)); do
-        PREFIX=$(yq -r ".rules[$i].path_prefix" "$MAP_FILE")
+        PREFIX=$(yq ".rules[$i].path_prefix" "$MAP_FILE")
 
         if [[ "$file" == "$PREFIX"* ]]; then
             FILE_MATCHED=true
 
-            RULE_RUN_ALL=$(yq -r ".rules[$i].run_all // false" "$MAP_FILE")
+            RULE_RUN_ALL=$(yq ".rules[$i].run_all" "$MAP_FILE")
             if [ "$RULE_RUN_ALL" == "true" ]; then
                 RUN_ALL=true
                 continue
             fi
 
-            while IFS= read -r t; do
-                [ -n "$t" ] && MATCHED_TESTS+=("$t")
-            done < <(yq -r ".rules[$i].tests[]? // empty" "$MAP_FILE")
+            TEST_COUNT=$(yq ".rules[$i].tests | length" "$MAP_FILE" 2>/dev/null || echo 0)
+            if [ "$TEST_COUNT" != "null" ] && [ "$TEST_COUNT" -gt 0 ] 2>/dev/null; then
+                while IFS= read -r t; do
+                    [ -n "$t" ] && MATCHED_TESTS+=("$t")
+                done < <(yq ".rules[$i].tests[]" "$MAP_FILE")
+            fi
 
-            while IFS= read -r t; do
-                [ -n "$t" ] && MATCHED_API_TESTS+=("$t")
-            done < <(yq -r ".rules[$i].api_tests[]? // empty" "$MAP_FILE")
+            API_TEST_COUNT=$(yq ".rules[$i].api_tests | length" "$MAP_FILE" 2>/dev/null || echo 0)
+            if [ "$API_TEST_COUNT" != "null" ] && [ "$API_TEST_COUNT" -gt 0 ] 2>/dev/null; then
+                while IFS= read -r t; do
+                    [ -n "$t" ] && MATCHED_API_TESTS+=("$t")
+                done < <(yq ".rules[$i].api_tests[]" "$MAP_FILE")
+            fi
         fi
     done
 
@@ -59,8 +65,6 @@ while IFS= read -r file; do
     fi
 done <<< "$CHANGED_FILES"
 
-# Safety net: any changed file with NO matching rule at all forces run_all.
-# An unmapped file is exactly the "we don't confidently know" case.
 if [ "${#UNMATCHED_FILES[@]}" -gt 0 ]; then
     echo "Unmapped files detected (no rule matched):" >&2
     printf '  %s\n' "${UNMATCHED_FILES[@]}" >&2
@@ -75,8 +79,8 @@ if [ "$RUN_ALL" == "true" ]; then
     exit 0
 fi
 
-UNIQUE_TESTS=$(printf '%s\n' "${MATCHED_TESTS[@]}" | sort -u | grep -v '^$' || true)
-UNIQUE_API_TESTS=$(printf '%s\n' "${MATCHED_API_TESTS[@]}" | sort -u | grep -v '^$' || true)
+UNIQUE_TESTS=$(printf '%s\n' "${MATCHED_TESTS[@]-}" | sort -u | grep -v '^$' || true)
+UNIQUE_API_TESTS=$(printf '%s\n' "${MATCHED_API_TESTS[@]-}" | sort -u | grep -v '^$' || true)
 
 echo "DECISION: Selected tests" >&2
 echo "" >&2
@@ -86,7 +90,5 @@ echo "" >&2
 echo "API tests (api-tests module):" >&2
 echo "$UNIQUE_API_TESTS" | sed 's/^/  /' >&2
 
-# Machine-readable output on stdout, everything above went to stderr.
-# This lets the script be safely piped/captured: `SELECTION=$(./select-tests.sh)`
 echo "MAIN_TESTS=$(echo "$UNIQUE_TESTS" | paste -sd, -)"
 echo "API_TESTS=$(echo "$UNIQUE_API_TESTS" | paste -sd, -)"
