@@ -1,0 +1,42 @@
+# Maps a changed source path prefix to the test classes that should run.
+# Order doesn't matter — all matching rules apply (union, not first-match).
+# "shared" paths intentionally map to ALL tests — see rationale below.
+
+rules:
+  - path_prefix: "src/main/java/com/jperez/lgsstorecrm/customer/"
+    tests:
+      - "com.jperez.lgsstorecrm.customer.*Test"
+    api_tests:
+      - "com.jperez.apitests.TenantIsolationApiTest"
+      - "com.jperez.apitests.CreditTransactionLifecycleApiTest"
+
+  - path_prefix: "src/main/java/com/jperez/lgsstorecrm/employee/"
+    tests:
+      - "com.jperez.lgsstorecrm.employee.*Test"
+    api_tests:
+      - "com.jperez.apitests.CreditTransactionLifecycleApiTest"
+
+  - path_prefix: "src/main/java/com/jperez/lgsstorecrm/transaction/"
+    tests:
+      - "com.jperez.lgsstorecrm.transaction.CustomerCreditServiceTest"
+      - "com.jperez.lgsstorecrm.transaction.CustomerCreditServiceConcurrencyTest"
+    api_tests:
+      - "com.jperez.apitests.CreditTransactionLifecycleApiTest"
+
+  - path_prefix: "src/main/java/com/jperez/lgsstorecrm/tenant/"
+    tests:
+      - "com.jperez.lgsstorecrm.tenant.*Test"
+    api_tests:
+      - "com.jperez.apitests.TenantLifecycleApiTest"
+      - "com.jperez.apitests.TenantIsolationApiTest"
+
+  # Shared/cross-cutting paths: no confident narrow mapping exists,
+  # so these deliberately trigger the FULL suite rather than guessing.
+  - path_prefix: "src/main/java/com/jperez/lgsstorecrm/common/"
+    run_all: true
+
+  - path_prefix: "src/main/resources/db/migration/"
+    run_all: true
+
+  - path_prefix: "pom.xml"
+    run_all: true
