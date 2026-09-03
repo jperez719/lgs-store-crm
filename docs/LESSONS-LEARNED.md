@@ -172,3 +172,56 @@ checking `RESTARTS` counts directly (`kubectl get pods`) rather than
 only checking pod status is `Running`, since a pod can restart
 repeatedly and still show healthy at any given moment you happen to
 look.
+
+## Testing — API automation
+
+### Allure's default results directory doesn't live under `target/`
+The Allure JUnit5 adapter writes to `./allure-results` relative to the
+JVM's working directory by default — for a Maven module, that resolves
+to the module root (e.g., `api-tests/allure-results`), not
+`api-tests/target/allure-results` as most other build output would
+suggest. This meant `allure serve target/allure-results` showed an
+empty report even though tests had genuinely run and passed. Fixed by
+explicitly setting `allure.results.directory` as a Surefire system
+property to point into `target/`, which also means `mvn clean`
+correctly removes stale results — a bare `./allure-results` folder at
+the project root is invisible to `clean` and would otherwise silently
+accumulate results across unrelated runs.
+
+### A black-box API test suite is a genuinely different, complementary check from white-box integration tests
+The existing Testcontainers-based tests (e.g., proving tenant isolation
+at the repository/query level) and the new REST-Assured-based API tests
+(proving tenant isolation over real HTTP, through the full controller
+stack) sound like they'd be redundant, but they are not: the API-level
+version is the only one that would catch a bug introduced purely in the
+controller layer — an incorrect `@PathVariable` mapping, a missing
+tenant check added at the wrong layer, an exception handler returning
+the wrong status code — none of which a repository-level test could
+ever see, since it never goes through HTTP or the controller at all.
+
+### A test framework supporting multiple run modes needs one clear seam, not scattered conditionals
+Supporting "run against an already-running instance" and "spin up a
+self-contained instance" in the same test suite could easily have
+turned into `if` checks scattered across every test class. Centralizing
+the decision in one place (`BaseApiTest.configureBaseUri()`, resolving
+the base URL once via a `selfContained` flag) meant every actual test
+class stays completely unaware of which mode it's running under — the
+same test code is genuinely reusable across local development and CI
+with zero duplication or branching logic inside the tests themselves.
+
+### Homebrew's source-build fallback is a recurring, predictable failure pattern on unsupported macOS versions
+This project hit the same underlying failure three separate times —
+installing `openjdk@25`, upgrading `allure`, and installing `yq` — each
+time because Homebrew had no prebuilt bottle for macOS 13 and silently
+fell back to compiling from source, which then failed for
+version-specific reasons (missing Xcode, complex build toolchains).
+The reliable fix each time was the same: stop fighting the Homebrew
+build and download a prebuilt binary directly from the project's own
+GitHub releases instead. Worth checking for this option first whenever
+a `brew install`/`brew upgrade` unexpectedly starts compiling
+dependencies rather than downloading a bottle.
+
+### Uncaught exceptions inside spawned threads fail silently unless explicitly captured
+(See also: the concurrency test bug described in the Testing section
+above.) This applies generally, not just to that one test: any code
+that manually
