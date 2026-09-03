@@ -107,3 +107,29 @@ jobs:
           name: allure-results
           path: api-tests/target/allure-results
           retention-days: 14
+
+  impact-analysis:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install yq
+        run: |
+          sudo curl -L https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /usr/local/bin/yq
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Determine impacted tests
+        run: |
+          ./scripts/select-tests.sh origin/${{ github.base_ref }} | tee impact-report.txt
+
+      - name: Upload impact report
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-impact-report
+          path: impact-report.txt
+          retention-days: 14
