@@ -1,5 +1,6 @@
 package com.jperez.lgsstorecrm.transaction;
 
+import com.jperez.lgsstorecrm.common.config.RabbitMQConfig;
 import com.jperez.lgsstorecrm.common.exception.CustomerNotFoundException;
 import com.jperez.lgsstorecrm.common.exception.EmployeeNotFoundException;
 import com.jperez.lgsstorecrm.common.exception.InsufficientCreditException;
@@ -28,8 +29,7 @@ public class CustomerCreditService {
 
     public CustomerCreditService(CustomerRepository customerRepository,
                                  CreditTransactionRepository creditTransactionRepository,
-                                 EmployeeRepository employeeRepository,
-                                 ApplicationEventPublisher eventPublisher) {
+                                 EmployeeRepository employeeRepository, ApplicationEventPublisher eventPublisher) {
         this.customerRepository = customerRepository;
         this.creditTransactionRepository = creditTransactionRepository;
         this.employeeRepository = employeeRepository;

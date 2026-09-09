@@ -225,3 +225,40 @@ dependencies rather than downloading a bottle.
 (See also: the concurrency test bug described in the Testing section
 above.) This applies generally, not just to that one test: any code
 that manually
+
+## Architecture
+
+### The most "natural-looking" service boundary isn't always the right one
+It's tempting to assume microservice boundaries should mirror existing
+code package structure — it's the most visually obvious split. But the
+real question is which operations need to be atomic together. Any
+group of writes that must succeed or fail as a single unit (here: the
+locked balance update + transaction insert) has to stay inside one
+service and one database, regardless of how naturally separable the
+code looks on the surface. Package structure is a hint about
+organization, not a guarantee about consistency requirements — those
+are two different concerns that happened to align in this project's
+package layout, but won't always.
+
+## Microservices / messaging
+
+### Adding a new Spring Boot starter can silently break every @SpringBootTest
+Adding `spring-boot-starter-amqp` didn't just add a dependency — it
+caused Spring Boot to auto-configure a real `RabbitTemplate` bean any
+time a full application context loads. This affected every
+`@SpringBootTest`-annotated test (`LgsStoreCrmApplicationTests`,
+`CustomerCreditServiceConcurrencyTest`), which failed to start their
+context without a reachable RabbitMQ — even tests with no direct
+relationship to messaging at all. Plain Mockito-based unit tests
+(`CustomerCreditServiceTest`) were completely unaffected, since they
+never boot a real Spring context. The fix followed the same pattern
+already established for Postgres: add a `RabbitMQContainer` via
+Testcontainers and point Spring's auto-configuration at it with
+`@DynamicPropertySource`, rather than requiring a real, separately
+running broker for tests to pass.
+
+Lesson: adding any new Spring Boot starter with auto-configuration
+(a database, a message broker, a cache, etc.) should prompt an explicit
+check of every `@SpringBootTest` in the project, not just the class
+being actively worked on — the blast radius of a new starter is the
+entire application context, not just the feature it was added for.
