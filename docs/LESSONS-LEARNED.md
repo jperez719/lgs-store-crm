@@ -262,3 +262,37 @@ Lesson: adding any new Spring Boot starter with auto-configuration
 check of every `@SpringBootTest` in the project, not just the class
 being actively worked on — the blast radius of a new starter is the
 entire application context, not just the feature it was added for.
+
+### A new dependency's blast radius extends to every environment that boots the app, not just the ones you remember
+Adding RabbitMQ required fixing the main test suite's Spring contexts
+(see above), but a second, separate environment was missed on the first
+pass: `api-tests`'s `SelfContainedEnvironment`, which spins up the
+actual built Docker image via Testcontainers for black-box API testing.
+This only surfaced once a real pull request ran CI — the app container
+failed its `/actuator/health` check with a persistent 503, timing out
+after two minutes, because `SelfContainedEnvironment` only provisioned
+Postgres, and the app (configured with `SPRING_PROFILES_ACTIVE=docker`)
+couldn't resolve the `rabbitmq` hostname it expected to find on the
+network. The fix mirrored the one already applied elsewhere: add a
+`RabbitMQContainer`, on the same Testcontainers network, with an
+explicit `withNetworkAliases("rabbitmq")` so the app's hardcoded
+hostname actually resolves.
+
+Lesson, restated more specifically this time: every place that boots a
+full instance of the app — each `@SpringBootTest`, and any Testcontainers-
+based environment that runs the packaged image directly — needs to be
+checked and updated together whenever a new infrastructure dependency
+is added. A useful habit: search the whole codebase (not just the
+module currently being edited) for `SPRING_PROFILES_ACTIVE=docker` or
+equivalent "boots the real app" patterns whenever a new starter is
+added, rather than relying on remembering every place it's used.
+
+### An invalid Docker tag can silently degrade into a different, confusing error
+Passing a git branch name containing a slash (`feature/microservice-split`)
+as a Docker image tag produced a malformed image reference
+(`lgs-store-crm:feature/microservice-split:latest` — two colons) further
+down the line, rather than a clear "invalid tag" error at the point of
+the mistake. Docker tags cannot contain `/` (it's reserved for registry
+namespace paths); worth remembering that a tag must be a single,
+slash-free segment, and that branch names are not safe to use as tags
+verbatim.
