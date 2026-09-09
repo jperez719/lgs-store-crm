@@ -225,3 +225,74 @@ dependencies rather than downloading a bottle.
 (See also: the concurrency test bug described in the Testing section
 above.) This applies generally, not just to that one test: any code
 that manually
+
+## Architecture
+
+### The most "natural-looking" service boundary isn't always the right one
+It's tempting to assume microservice boundaries should mirror existing
+code package structure — it's the most visually obvious split. But the
+real question is which operations need to be atomic together. Any
+group of writes that must succeed or fail as a single unit (here: the
+locked balance update + transaction insert) has to stay inside one
+service and one database, regardless of how naturally separable the
+code looks on the surface. Package structure is a hint about
+organization, not a guarantee about consistency requirements — those
+are two different concerns that happened to align in this project's
+package layout, but won't always.
+
+## Microservices / messaging
+
+### Adding a new Spring Boot starter can silently break every @SpringBootTest
+Adding `spring-boot-starter-amqp` didn't just add a dependency — it
+caused Spring Boot to auto-configure a real `RabbitTemplate` bean any
+time a full application context loads. This affected every
+`@SpringBootTest`-annotated test (`LgsStoreCrmApplicationTests`,
+`CustomerCreditServiceConcurrencyTest`), which failed to start their
+context without a reachable RabbitMQ — even tests with no direct
+relationship to messaging at all. Plain Mockito-based unit tests
+(`CustomerCreditServiceTest`) were completely unaffected, since they
+never boot a real Spring context. The fix followed the same pattern
+already established for Postgres: add a `RabbitMQContainer` via
+Testcontainers and point Spring's auto-configuration at it with
+`@DynamicPropertySource`, rather than requiring a real, separately
+running broker for tests to pass.
+
+Lesson: adding any new Spring Boot starter with auto-configuration
+(a database, a message broker, a cache, etc.) should prompt an explicit
+check of every `@SpringBootTest` in the project, not just the class
+being actively worked on — the blast radius of a new starter is the
+entire application context, not just the feature it was added for.
+
+### A new dependency's blast radius extends to every environment that boots the app, not just the ones you remember
+Adding RabbitMQ required fixing the main test suite's Spring contexts
+(see above), but a second, separate environment was missed on the first
+pass: `api-tests`'s `SelfContainedEnvironment`, which spins up the
+actual built Docker image via Testcontainers for black-box API testing.
+This only surfaced once a real pull request ran CI — the app container
+failed its `/actuator/health` check with a persistent 503, timing out
+after two minutes, because `SelfContainedEnvironment` only provisioned
+Postgres, and the app (configured with `SPRING_PROFILES_ACTIVE=docker`)
+couldn't resolve the `rabbitmq` hostname it expected to find on the
+network. The fix mirrored the one already applied elsewhere: add a
+`RabbitMQContainer`, on the same Testcontainers network, with an
+explicit `withNetworkAliases("rabbitmq")` so the app's hardcoded
+hostname actually resolves.
+
+Lesson, restated more specifically this time: every place that boots a
+full instance of the app — each `@SpringBootTest`, and any Testcontainers-
+based environment that runs the packaged image directly — needs to be
+checked and updated together whenever a new infrastructure dependency
+is added. A useful habit: search the whole codebase (not just the
+module currently being edited) for `SPRING_PROFILES_ACTIVE=docker` or
+equivalent "boots the real app" patterns whenever a new starter is
+added, rather than relying on remembering every place it's used.
+
+### An invalid Docker tag can silently degrade into a different, confusing error
+Passing a git branch name containing a slash (`feature/microservice-split`)
+as a Docker image tag produced a malformed image reference
+(`lgs-store-crm:feature/microservice-split:latest` — two colons) further
+down the line, rather than a clear "invalid tag" error at the point of
+the mistake. Docker tags cannot contain `/` (it's reserved for registry
+namespace paths); worth remembering that a tag must be a single,
+slash-free segment, and that branch names are not safe to use as tags
+verbatim.

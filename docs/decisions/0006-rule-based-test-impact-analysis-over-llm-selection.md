@@ -49,7 +49,8 @@ it will never be the sole mechanism deciding whether a test runs.
   burden (e.g., suggesting new mapping entries when an unmapped file is
   detected), without ever becoming the component that decides whether
   a test is skipped.
-- This mirrors ADR 0006's underlying principle in a different domain:
-  favor a boundary/mechanism that fails safe and predictably over one
-  that is more flexible but can fail silently in a way that looks like
-  success.
+- This principle — preferring a mechanism that fails safe and
+  predictably over one that is more flexible but can fail silently in
+  a way that looks like success — is applied again in ADR 0007, when
+  choosing microservice boundaries around transactional consistency
+  rather than surface-level code structure.

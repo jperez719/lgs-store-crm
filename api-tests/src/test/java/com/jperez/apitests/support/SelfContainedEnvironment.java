@@ -3,19 +3,12 @@ package com.jperez.apitests.support;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
 
 import java.time.Duration;
 
-/**
- * Spins up the actual application Docker image (built via
- * `docker build -t lgs-store-crm:<tag> .`) plus a real Postgres
- * container, wired together on a shared Docker network — mirroring
- * production topology rather than mocking anything.
- *
- * Used only when API_BASE_URL is not supplied externally.
- */
 public class SelfContainedEnvironment {
 
     private static final String APP_IMAGE =
@@ -23,6 +16,7 @@ public class SelfContainedEnvironment {
 
     private static Network network;
     private static PostgreSQLContainer<?> postgres;
+    private static RabbitMQContainer rabbitMQ;
     private static GenericContainer<?> app;
 
     private static boolean started = false;
@@ -42,12 +36,19 @@ public class SelfContainedEnvironment {
                 .withPassword("changeme");
         postgres.start();
 
+        rabbitMQ = new RabbitMQContainer(DockerImageName.parse("rabbitmq:3.13-management"))
+                .withNetwork(network)
+                .withNetworkAliases("rabbitmq");
+        rabbitMQ.start();
+
         app = new GenericContainer<>(DockerImageName.parse(APP_IMAGE))
                 .withNetwork(network)
                 .withExposedPorts(8080)
                 .withEnv("SPRING_PROFILES_ACTIVE", "docker")
                 .withEnv("DB_USERNAME", "store_admin")
                 .withEnv("DB_PASSWORD", "changeme")
+                .withEnv("RABBITMQ_USERNAME", rabbitMQ.getAdminUsername())
+                .withEnv("RABBITMQ_PASSWORD", rabbitMQ.getAdminPassword())
                 .waitingFor(Wait.forHttp("/actuator/health").forStatusCode(200))
                 .withStartupTimeout(Duration.ofMinutes(2));
         app.start();
