@@ -296,3 +296,23 @@ the mistake. Docker tags cannot contain `/` (it's reserved for registry
 namespace paths); worth remembering that a tag must be a single,
 slash-free segment, and that branch names are not safe to use as tags
 verbatim.
+
+### Changing a message converter does not retroactively fix messages already sitting in a queue
+After fixing the message converter mismatch (see ADR 0009), the
+notification-service consumer still failed on the next message with a
+`MessageConversionException`. The cause wasn't a new bug: RabbitMQ
+queues are durable and persist their contents independently of producer
+or consumer code changes. A message published earlier under the old,
+incorrect Java-serialization format remained in the queue and was
+repeatedly redelivered (`amqp_redelivered=true`), poisoning every
+attempt to consume it — visible in the message headers
+(`contentType=application/x-java-serialized-object`). The fix was
+purging the queue via the RabbitMQ management UI (or
+`rabbitmqctl purge_queue <queue-name>`) before testing again with a
+freshly published message.
+
+Lesson: when changing a message's serialization format or schema on a
+running system, existing durable queues need to be explicitly purged,
+migrated, or drained — a code fix alone does not retroactively repair
+already-queued messages, and a "poisoned" message can silently loop via
+redelivery, making a fix look like it isn't working.

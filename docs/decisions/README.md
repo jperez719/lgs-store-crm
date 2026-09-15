@@ -10,3 +10,4 @@
 | [0006](0006-rule-based-test-impact-analysis-over-llm-selection.md)         | Rule-based test impact analysis, AI as advisory only | Accepted |
 | [0007](0007-microservice-boundaries-preserve-transactional-consistency.md) | Microservice boundaries preserve transactional consistency | Accepted |
 | [0008](0008-preserve-after-commit-guarantee-when-adding-rabbitmq.md) | Preserve AFTER_COMMIT guarantee when introducing RabbitMQ | Accepted |
+| [0009](0009-json-message-converter-for-rabbitmq.md) | JSON message converter for RabbitMQ (JacksonJsonMessageConverter) | Accepted |
