@@ -316,3 +316,63 @@ running system, existing durable queues need to be explicitly purged,
 migrated, or drained — a code fix alone does not retroactively repair
 already-queued messages, and a "poisoned" message can silently loop via
 redelivery, making a fix look like it isn't working.
+
+## Cross-service / integration (spans store-core-service and notification-service)
+
+### Docker Compose auto-registers service keys as network aliases — identical keys across separate compose projects collide on a shared network
+Two independent docker-compose.yml files (store-core-service and
+notification-service) both originally used the service key `postgres:`
+for their respective database services. In isolation, each compose
+project's default network scopes this cleanly with no conflict. Once
+both projects joined the same external Docker network
+(`store-crm-shared`) — needed so notification-service could reach
+store-core-service's RabbitMQ — Docker's per-network DNS registered
+*both* containers under the same alias, `postgres`, the automatic alias
+Compose derives from the service key. This produced non-deterministic
+cross-talk: queries meant for one service's database would occasionally
+resolve to the other container, surfacing as
+`FATAL: database "X" does not exist` errors naming the *wrong*
+service's database — a genuinely confusing symptom, since each
+container's own logs looked normal in isolation.
+
+Adding an explicit `aliases:` entry did **not** fix this — Compose's
+automatic service-key alias is not removed or overridden by
+supplementary aliases; it persists alongside them. The actual fix was
+renaming the service key itself (`postgres:` → `store-postgres:` /
+`notification-postgres:`). Renaming a service key also orphans the
+previously-running container under the old key — Compose refuses to
+reuse its container name, requiring `docker compose down -v
+--remove-orphans` to fully clear it before the renamed service can
+start cleanly.
+
+Lesson: when joining independent Docker Compose projects onto a shared
+external network, every service key across all of them must be
+globally unique on that network. Locally-reasonable, generic names
+(`postgres`, `redis`, `app`) become real collision risks the moment
+more than one compose project shares a network — this needs to be
+decided deliberately up front, not discovered through a confusing
+cross-service data error.
+
+### A source fix doesn't take effect until the image is actually rebuilt — `docker compose up` alone does not guarantee a rebuild
+After correcting a hardcoded hostname in `application-docker.properties`
+(from the old `postgres` alias to the renamed `notification-postgres`),
+`docker compose up -d` continued running the *old*, stale image —
+Compose's default change detection did not reliably trigger a rebuild
+from a properties-file change buried inside the build context. The
+container kept failing with `UnknownHostException: postgres` even
+though the source file on disk was already correct, because the
+running container was still built from before the fix.
+
+The fix was forcing an explicit rebuild: `docker compose up -d --build`
+(or `docker compose build --no-cache <service>` for a fully clean
+rebuild when even `--build` doesn't pick up the change). Confirmed by
+checking the actual startup log inside the container
+(`docker logs <container> | grep jdbc:postgresql`) rather than trusting
+that "I changed the source" implies "the running container reflects
+it."
+
+Lesson: after any change to a file that lives inside a Docker build
+context — application properties, Dockerfile, source code — verify the
+running container's actual behavior directly (logs, `docker exec`)
+rather than assuming a plain `docker compose up` picked up the change.
+`--build` is not automatic.

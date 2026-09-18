@@ -1,5 +1,5 @@
 services:
-  postgres:
+  store-postgres:
     image: postgres:16
     container_name: store-crm-postgres
     environment:
@@ -10,6 +10,8 @@ services:
       - "5432:5432"
     volumes:
       - store_crm_pgdata:/var/lib/postgresql/data
+    networks:
+      - store-crm-shared
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d store_crm_db"]
       interval: 5s
@@ -23,8 +25,10 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
     ports:
-      - "5672:5672"    # AMQP protocol port — used by your app to publish/consume
-      - "15672:15672"  # Management UI — browser-based dashboard
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - store-crm-shared
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -38,11 +42,21 @@ services:
       SPRING_PROFILES_ACTIVE: docker
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
     ports:
       - "8080:8080"
     depends_on:
-      postgres:
+      store-postgres:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - store-crm-shared
 
 volumes:
   store_crm_pgdata:
+
+networks:
+  store-crm-shared:
+    external: true

@@ -1,4 +1,8 @@
 # Architecture Decision Records
+This repo is the architectural source of truth for the overall
+lgs-store-crm system, including decisions that affect other services
+(e.g., notification-service). Service-specific implementation notes
+live in each service's own repo.
 
 | #                                                                          | Decision | Status |
 |----------------------------------------------------------------------------|----------|--------|
