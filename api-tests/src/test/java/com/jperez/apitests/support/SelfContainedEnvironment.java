@@ -6,6 +6,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
+import org.testcontainers.containers.output.OutputFrame;
 
 import java.time.Duration;
 
@@ -30,7 +31,7 @@ public class SelfContainedEnvironment {
 
         postgres = new PostgreSQLContainer<>(DockerImageName.parse("postgres:16"))
                 .withNetwork(network)
-                .withNetworkAliases("postgres")
+                .withNetworkAliases("store-postgres")
                 .withDatabaseName("store_crm_db")
                 .withUsername("store_admin")
                 .withPassword("changeme");
@@ -51,6 +52,7 @@ public class SelfContainedEnvironment {
                 .withEnv("RABBITMQ_PASSWORD", rabbitMQ.getAdminPassword())
                 .waitingFor(Wait.forHttp("/actuator/health").forStatusCode(200))
                 .withStartupTimeout(Duration.ofMinutes(2));
+        app.withLogConsumer(outputFrame -> System.out.print("[APP] " + outputFrame.getUtf8String()));
         app.start();
 
         started = true;

@@ -226,6 +226,40 @@ dependencies rather than downloading a bottle.
 above.) This applies generally, not just to that one test: any code
 that manually
 
+### Renaming a hostname/alias requires updating every environment that references it, not just the primary one
+When store-postgres's Docker Compose service key was renamed from
+`postgres` to `store-postgres` to resolve a network alias collision
+(see the earlier entry on this), four separate places referenced the
+old hostname and needed updating: store-core-service's own
+docker-compose.yml, its application-docker.properties, and — missed
+initially — api-tests' SelfContainedEnvironment.java, which
+independently provisions its own Testcontainers-based Postgres and
+RabbitMQ for black-box API testing. The mismatch was invisible for a
+long time because Testcontainers' generic timeout error ("Connection
+refused" waiting for /actuator/health) gave no indication of the real
+cause — the app container was crashing immediately on startup with a
+real, specific exception (UnknownHostException), but that detail was
+inaccessible without deliberately capturing the container's own logs.
+
+The debugging path that actually worked: disable Testcontainers' Ryuk
+cleanup (`TESTCONTAINERS_RYUK_DISABLED=true`) to prevent a crashed
+container from disappearing before it could be inspected, and add a
+log consumer that writes the app container's stdout directly to the
+test's own console output in real time — critically, a raw
+System.out-based consumer, not one routed through SLF4J, since
+api-tests has no logging backend configured and SLF4J was silently
+discarding every log line sent to it.
+
+Lesson: a hostname or alias used across multiple independent
+environments (local Docker Compose, CI, self-contained test
+provisioning) needs a single source of truth or an explicit checklist
+of every place it's referenced — renaming it in the "main" place is not
+enough. Separately: when debugging a Testcontainers container that
+fails to become healthy, stream its logs directly (a raw stdout
+consumer) rather than relying on Testcontainers' own wrapper exception,
+which only reports symptoms (timeout, connection refused) and never the
+underlying application-level cause.
+
 ## Architecture
 
 ### The most "natural-looking" service boundary isn't always the right one
