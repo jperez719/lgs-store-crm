@@ -36,5 +36,5 @@ build/
 .env
 application-local.properties
 
-k8s/postgres-secret.yaml
-k8s/app-secret.yaml
+k8s/*secret*.yaml
+!k8s/*secret*.example.yaml

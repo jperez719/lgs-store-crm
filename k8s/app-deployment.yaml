@@ -20,7 +20,7 @@ spec:
             - sh
             - -c
             - |
-              until pg_isready -h postgres -p 5432 -U store_admin; do
+              until pg_isready -h store-postgres -p 5432 -U store_admin; do
                 echo "Waiting for postgres..."
                 sleep 2
               done
