@@ -15,3 +15,4 @@ live in each service's own repo.
 | [0007](0007-microservice-boundaries-preserve-transactional-consistency.md) | Microservice boundaries preserve transactional consistency | Accepted |
 | [0008](0008-preserve-after-commit-guarantee-when-adding-rabbitmq.md) | Preserve AFTER_COMMIT guarantee when introducing RabbitMQ | Accepted |
 | [0009](0009-json-message-converter-for-rabbitmq.md) | JSON message converter for RabbitMQ (JacksonJsonMessageConverter) | Accepted |
+| [0010](0010-claude-api-test-failure-triage.md) | Claude API for test/failure triage | Accepted |
