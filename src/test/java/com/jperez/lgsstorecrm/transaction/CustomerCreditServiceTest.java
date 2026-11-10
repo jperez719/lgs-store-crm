@@ -3,6 +3,7 @@ package com.jperez.lgsstorecrm.transaction;
 import com.jperez.lgsstorecrm.common.exception.CustomerNotFoundException;
 import com.jperez.lgsstorecrm.common.exception.EmployeeNotFoundException;
 import com.jperez.lgsstorecrm.common.exception.InsufficientCreditException;
+import com.jperez.lgsstorecrm.common.exception.IdempotencyKeyReuseException;
 import com.jperez.lgsstorecrm.customer.Customer;
 import com.jperez.lgsstorecrm.customer.CustomerRepository;
 import com.jperez.lgsstorecrm.employee.Employee;
@@ -172,5 +173,64 @@ class CustomerCreditServiceTest {
 
         verifyNoInteractions(employeeRepository);
         verify(creditTransactionRepository, never()).save(any());
+    }
+
+    @Test
+    void applyTransaction_withNewKey_storesKeyOnTransaction() {
+        when(customerRepository.findByIdAndTenantIdForUpdate(customerId, tenantId)).thenReturn(Optional.of(customer));
+        when(creditTransactionRepository.findByTenantIdAndIdempotencyKey(tenantId, "key-1")).thenReturn(Optional.empty());
+        when(employeeRepository.findByIdAndTenantId(employeeId, tenantId)).thenReturn(Optional.of(employee));
+
+        customerCreditService.applyTransaction(
+                tenantId, customerId, employeeId, TransactionType.CREDIT, new BigDecimal("15.00"), "Promo", "key-1"
+        );
+
+        ArgumentCaptor<CreditTransaction> captor = ArgumentCaptor.forClass(CreditTransaction.class);
+        verify(creditTransactionRepository).save(captor.capture());
+        assertThat(captor.getValue().getIdempotencyKey()).isEqualTo("key-1");
+    }
+
+    @Test
+    void applyTransaction_replayWithSameKeyAndSameRequest_doesNotApplyAgain() {
+        Customer existingCustomer = mock(Customer.class);
+        when(existingCustomer.getId()).thenReturn(customerId);
+        Employee existingEmployee = mock(Employee.class);
+        when(existingEmployee.getId()).thenReturn(employeeId);
+        CreditTransaction existing = new CreditTransaction(
+                null, existingCustomer, existingEmployee, TransactionType.CREDIT,
+                new BigDecimal("15.00"), "Promo", new BigDecimal("65.00"), "key-1");
+
+        when(customerRepository.findByIdAndTenantIdForUpdate(customerId, tenantId)).thenReturn(Optional.of(customer));
+        when(creditTransactionRepository.findByTenantIdAndIdempotencyKey(tenantId, "key-1")).thenReturn(Optional.of(existing));
+
+        Customer result = customerCreditService.applyTransaction(
+                tenantId, customerId, employeeId, TransactionType.CREDIT, new BigDecimal("15.00"), "Promo", "key-1"
+        );
+
+        assertThat(result.getStoreCredit()).isEqualByComparingTo("50.00");   // unchanged
+        verify(customerRepository, never()).save(any());
+        verify(creditTransactionRepository, never()).save(any());
+        verifyNoInteractions(employeeRepository, eventPublisher);
+    }
+
+    @Test
+    void applyTransaction_replayWithSameKeyButDifferentAmount_throwsIdempotencyKeyReuseException() {
+        Customer existingCustomer = mock(Customer.class);
+        when(existingCustomer.getId()).thenReturn(customerId);
+        Employee existingEmployee = mock(Employee.class);
+        when(existingEmployee.getId()).thenReturn(employeeId);
+        CreditTransaction existing = new CreditTransaction(
+                null, existingCustomer, existingEmployee, TransactionType.CREDIT,
+                new BigDecimal("15.00"), "Promo", new BigDecimal("65.00"), "key-1");
+
+        when(customerRepository.findByIdAndTenantIdForUpdate(customerId, tenantId)).thenReturn(Optional.of(customer));
+        when(creditTransactionRepository.findByTenantIdAndIdempotencyKey(tenantId, "key-1")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> customerCreditService.applyTransaction(
+                tenantId, customerId, employeeId, TransactionType.CREDIT, new BigDecimal("99.00"), "Promo", "key-1"
+        )).isInstanceOf(IdempotencyKeyReuseException.class);
+
+        verify(creditTransactionRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher);
     }
 }

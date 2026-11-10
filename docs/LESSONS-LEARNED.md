@@ -351,6 +351,123 @@ migrated, or drained — a code fix alone does not retroactively repair
 already-queued messages, and a "poisoned" message can silently loop via
 redelivery, making a fix look like it isn't working.
 
+### At-least-once delivery means duplicates are normal — the database constraint is the guarantee, an `exists` check is only a fast path
+notification-service inserted a `notifications` row for every message it
+received. RabbitMQ delivers at-least-once, and ADR 0009 had already shown
+a message being redelivered (`amqp_redelivered=true`), so a redelivered
+event produced a duplicate row. The first instinct was an
+`existsByTransactionId` check before inserting, but that is a
+read-then-write race: two copies processed at the same time can both
+pass the check and both insert. The actual guarantee is a unique
+constraint on `transaction_id`; the `exists` check just avoids the
+exception in the common case.
+
+Lesson: design every message consumer assuming each message may arrive
+more than once. Pick an idempotency key (here, `transaction_id`) and let
+the database enforce uniqueness. Pessimistic locking (ADR 0001) solves
+concurrent writers inside one service; it does not make a consumer safe
+against redelivery.
+
+### Treat a duplicate as success, and catch the violation outside the transaction
+Throwing from a `@RabbitListener` makes the message requeue and redeliver
+forever, the same poison-message loop seen in ADR 0009. So a duplicate
+must be absorbed, not thrown. The unique-constraint violation also does
+not surface where you might expect: with `GenerationType.UUID` the insert
+is deferred until commit, so `DataIntegrityViolationException` is raised
+after the `@Transactional` service method returns. A `try/catch` inside
+the service method never sees it, and if it were flushed and caught
+inside, Postgres would already have aborted the transaction. The catch
+belongs in the caller (the listener), outside the transaction boundary.
+
+Lesson: catch constraint violations at the transaction boundary, not
+inside it, and decide deliberately whether a given error means "retry"
+(throw) or "already done" (swallow and log).
+
+### A concurrent test can pass without exercising the path you care about — pair it with a deterministic one
+The two-thread test passes whether the second thread is stopped by the
+`exists` check or by the constraint, so a green run does not say which
+path ran. A separate test that inserts a second row with the same
+`transaction_id` directly proves the constraint deterministically.
+Reading the test log confirmed the race path really occurred (both
+threads logged `[NOTIFICATION]`, one then hit
+`uq_notifications_transaction_id`). Also verify a test can fail:
+temporarily remove the guard and confirm the tests go red.
+
+Lesson: for race conditions, combine a concurrent test (shows no
+exception leaks) with a deterministic test of the underlying guarantee,
+and check the logs to see which path executed.
+
+### Add the constraint in a migration that first cleans existing duplicates
+Adding `UNIQUE (transaction_id)` to a table that already contains
+duplicates fails the migration. Rows created during earlier redelivery
+testing could have broken it, so V2 deletes duplicates (keeping the
+earliest by `created_at`, then `id`) before adding the constraint. Never
+edit V1; add V2, consistent with the Flyway rule in ADR 0002.
+
+### Known limitation: the side effect can run twice in the race path
+When two copies race, both run the "send" step (currently a log line)
+before the loser's insert fails. Harmless for a log, but with a real
+email/SMS channel it could send twice. Fix when a real channel is added:
+insert first and send only if the insert succeeded (or
+`INSERT ... ON CONFLICT DO NOTHING` and check the affected row count).
+
+### Locking makes concurrent requests safe; it does not make retries safe — and the idempotency check must run after the lock
+Pessimistic locking (ADR 0001) serializes requests on the customer row,
+but a client retry is still a valid, separate request, so a timed-out
+credit that was retried applied twice. The fix is an `Idempotency-Key`
+stored on the transaction with a unique `(tenant_id, idempotency_key)`
+constraint. Where the check runs matters: looking up the key after
+taking the `FOR UPDATE` lock means a concurrent retry waits for the
+first request to commit and then finds its row, so it returns a clean
+replay instead of racing. Checking before the lock would leave only the
+constraint to stop the duplicate, as an error.
+
+Lesson: concurrency control and idempotency solve different problems and
+you need both. Put the idempotency lookup inside the same critical
+section as the write it protects, and keep the unique constraint as the
+backstop.
+
+### A replay must be a no-op in every dimension, including side effects
+A replayed request must not insert a row, change the balance, or publish
+the domain event. The API test log confirmed it: six events were
+published for four tests, with the replayed request publishing none.
+Returning early before the insert is what skips the event, because the
+event is published from the same code path that creates the transaction.
+
+Lesson: when making an operation idempotent, list every side effect
+(database writes, events, notifications) and verify each one is skipped
+on replay, not just the headline one.
+
+### Reusing a key with a different request is an error, not a replay
+If a key is reused with a different amount or customer, silently
+returning success would hide a client bug and report an outcome that
+never happened. The service compares the stored transaction with the new
+request (using `compareTo` for `BigDecimal`, not `equals`) and rejects a
+mismatch with 422.
+
+### A 500 with no log line is very hard to diagnose
+While adding the 422 handler, the missing handler caused a 500 and the
+application log showed no error or stack trace at all, so the only clue
+was the status code. The generic fallback exception handler should always
+log the exception (`log.error("Unhandled exception", ex)`) even though
+the response body stays generic.
+
+### Know which mode the API tests run in
+Running `mvn test` in `api-tests` fails with "API_BASE_URL is not set",
+because the suite has two modes: against an already-running instance
+(`API_BASE_URL`) or self-contained
+(`-DselfContained=true -DAPP_IMAGE=<image>`). Self-contained mode runs
+the built image, so the image must be rebuilt after every app code
+change before the tests reflect it (same lesson as the earlier stale
+image entry). A wrong command in the README sent this issue around once;
+documentation commands need to be run, not just written.
+
+### Make a new request header optional first
+Making `Idempotency-Key` optional kept every existing client and API test
+working unchanged and let the feature ship in small steps. The trade-off
+is that protection is only as good as client adoption; making it
+required is a later, deliberate breaking change.
+
 ## Cross-service / integration (spans store-core-service and notification-service)
 
 ### Docker Compose auto-registers service keys as network aliases — identical keys across separate compose projects collide on a shared network

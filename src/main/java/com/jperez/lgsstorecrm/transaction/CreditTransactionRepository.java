@@ -4,10 +4,13 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.util.Optional;
 import java.util.UUID;
 
 public interface CreditTransactionRepository extends JpaRepository<CreditTransaction, UUID> {
 
     Page<CreditTransaction> findByCustomerIdAndTenantIdOrderByCreatedAtDesc(
             UUID customerId, UUID tenantId, Pageable pageable);
+
+    Optional<CreditTransaction> findByTenantIdAndIdempotencyKey(UUID tenantId, String idempotencyKey);
 }

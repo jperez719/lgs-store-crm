@@ -13,6 +13,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.event.RecordApplicationEvents;
+import org.springframework.data.domain.Pageable;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -65,6 +66,9 @@ class CustomerCreditServiceConcurrencyTest {
 
     @Autowired
     private TenantRepository tenantRepository;
+
+    @Autowired
+    private CreditTransactionRepository creditTransactionRepository;
 
     @Test
     void concurrentCreditTransactions_onSameCustomer_bothApplyCorrectly() throws InterruptedException {
@@ -142,5 +146,63 @@ class CustomerCreditServiceConcurrencyTest {
                 customerInTenantA.getId(), tenantA.getId()
         );
         assertThat(correctLookup).isPresent();
+    }
+
+    @Test
+    void concurrentRequestsWithSameIdempotencyKey_applyExactlyOnce() throws InterruptedException {
+        Tenant tenant = tenantRepository.save(new Tenant("Idempotency Store"));
+
+        Customer customer = new Customer("Jane", "Doe", "555-1234", "123 Main St");
+        customer.setTenant(tenant);
+        customer = customerRepository.save(customer);
+
+        Employee employee = new Employee("John", "Smith", Role.EMPLOYEE);
+        employee.setTenant(tenant);
+        employee = employeeRepository.save(employee);
+
+        UUID tenantId = tenant.getId();
+        UUID customerId = customer.getId();
+        UUID employeeId = employee.getId();
+
+        int threadCount = 2;
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        CountDownLatch readyLatch = new CountDownLatch(threadCount);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch doneLatch = new CountDownLatch(threadCount);
+        List<Throwable> failures = Collections.synchronizedList(new ArrayList<>());
+
+        Runnable task = () -> {
+            try {
+                readyLatch.countDown();
+                startLatch.await();
+                customerCreditService.applyTransaction(
+                        tenantId, customerId, employeeId, TransactionType.CREDIT,
+                        new BigDecimal("50.00"), "Retried credit", "same-key-123"
+                );
+            } catch (Throwable t) {
+                failures.add(t);
+            } finally {
+                doneLatch.countDown();
+            }
+        };
+
+        executor.submit(task);
+        executor.submit(task);
+
+        readyLatch.await();
+        startLatch.countDown();
+        boolean finished = doneLatch.await(10, TimeUnit.SECONDS);
+        executor.shutdown();
+
+        assertThat(finished).isTrue();
+        assertThat(failures).isEmpty();
+
+        Customer updated = customerRepository.findByIdAndTenantId(customerId, tenantId).orElseThrow();
+        assertThat(updated.getStoreCredit()).isEqualByComparingTo("50.00");   // applied once, not twice
+
+        long rows = creditTransactionRepository
+                .findByCustomerIdAndTenantIdOrderByCreatedAtDesc(customerId, tenantId, Pageable.unpaged())
+                .getTotalElements();
+        assertThat(rows).isEqualTo(1);
     }
 }
