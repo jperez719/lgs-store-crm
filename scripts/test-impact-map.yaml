@@ -22,6 +22,7 @@ rules:
       - "com.jperez.lgsstorecrm.transaction.CustomerCreditServiceConcurrencyTest"
     api_tests:
       - "com.jperez.apitests.CreditTransactionLifecycleApiTest"
+      - "com.jperez.apitests.IdempotencyApiTest"
 
   - path_prefix: "src/main/java/com/jperez/lgsstorecrm/tenant/"
     tests:

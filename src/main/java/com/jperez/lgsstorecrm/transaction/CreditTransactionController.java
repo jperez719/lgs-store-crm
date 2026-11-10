@@ -1,5 +1,6 @@
 package com.jperez.lgsstorecrm.transaction;
 
+import com.jperez.lgsstorecrm.common.exception.InvalidIdempotencyKeyException;
 import com.jperez.lgsstorecrm.customer.dto.CustomerResponse;
 import com.jperez.lgsstorecrm.transaction.dto.CreateTransactionRequest;
 import com.jperez.lgsstorecrm.transaction.dto.TransactionResponse;
@@ -26,16 +27,21 @@ public class CreditTransactionController {
     }
 
     @PostMapping
-    public ResponseEntity<CustomerResponse> applyTransaction(@PathVariable UUID tenantId,
-                                                             @PathVariable UUID customerId,
-                                                             @Valid @RequestBody CreateTransactionRequest request) {
+    public ResponseEntity<CustomerResponse> applyTransaction(
+            @PathVariable UUID tenantId,
+            @PathVariable UUID customerId,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @Valid @RequestBody CreateTransactionRequest request) {
+
+        if (idempotencyKey != null && (idempotencyKey.isBlank() || idempotencyKey.length() > 100)) {
+            throw new InvalidIdempotencyKeyException("Idempotency-Key must be 1-100 characters");
+        }
+
         var customer = customerCreditService.applyTransaction(
-                tenantId,
-                customerId,
-                request.getEmployeeId(),
-                request.getType(),
-                request.getAmount(),
-                request.getReason()
+                tenantId, customerId,
+                request.getEmployeeId(), request.getType(),
+                request.getAmount(), request.getReason(),
+                idempotencyKey
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(new CustomerResponse(customer));
     }

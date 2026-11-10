@@ -45,6 +45,9 @@ public class CreditTransaction {
     @JoinColumn(name = "tenant_id", nullable = false)
     private Tenant tenant;
 
+    @Column(name = "idempotency_key", length = 100)
+    private String idempotencyKey;
+
     protected CreditTransaction() {
         // required by JPA
     }
@@ -58,6 +61,19 @@ public class CreditTransaction {
         this.amount = amount;
         this.reason = reason;
         this.resultingBalance = resultingBalance;
+    }
+
+    public CreditTransaction(Tenant tenant, Customer customer, Employee employee, TransactionType type,
+                             BigDecimal amount, String reason, BigDecimal resultingBalance,
+                             String idempotencyKey) {
+        this.tenant = tenant;
+        this.customer = customer;
+        this.employee = employee;
+        this.type = type;
+        this.amount = amount;
+        this.reason = reason;
+        this.resultingBalance = resultingBalance;
+        this.idempotencyKey = idempotencyKey;
     }
 
     @PrePersist
@@ -103,5 +119,13 @@ public class CreditTransaction {
 
     public void setTenant(Tenant tenant) {
         this.tenant = tenant;
+    }
+
+    public String getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    public void setIdempotencyKey(String idempotencyKey) {
+        this.idempotencyKey = idempotencyKey;
     }
 }

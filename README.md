@@ -66,8 +66,8 @@ Swagger UI: http://localhost:8080/swagger-ui.html
 ## Tests
 
 ```bash
-mvn clean test                 # unit + Testcontainers integration tests (needs Docker)
-cd api-tests && mvn test       # black-box API tests (self-contained mode)
+docker build -t lgs-store-crm:local .
+cd api-tests && mvn clean test -DselfContained=true -DAPP_IMAGE=lgs-store-crm:local
 ```
 
 ## More
